@@ -2,10 +2,10 @@ import os
 import pickle
 import base64
 from datetime import datetime
-
 from google.auth.transport.requests import Request
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
+from backend.app import config
 
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
@@ -15,18 +15,36 @@ SCOPES = [
 TOKEN_FILE = "token.pickle"
 CREDENTIALS_FILE = "backend/app/credentials.json"
 
-# Inject credentials.json from environment variable on deployment
 if os.environ.get("GOOGLE_CREDS") and not os.path.exists(CREDENTIALS_FILE):
     os.makedirs(os.path.dirname(CREDENTIALS_FILE), exist_ok=True)
     with open(CREDENTIALS_FILE, "w") as f:
         f.write(os.environ["GOOGLE_CREDS"])
 
-# Inject token.pickle from env if not present
-if os.environ.get("GOOGLE_TOKEN") and not os.path.exists("token.pickle"):
-    with open("token.pickle", "wb") as f:
-        import base64
+if os.environ.get("GOOGLE_TOKEN") and not os.path.exists(TOKEN_FILE):
+    with open(TOKEN_FILE, "wb") as f:
         f.write(base64.b64decode(os.environ["GOOGLE_TOKEN"]))
 
+def build_flow():
+    return Flow.from_client_secrets_file(
+        CREDENTIALS_FILE,
+        scopes=SCOPES,
+        redirect_uri=os.environ["GOOGLE_REDIRECT_URI"]
+    )
+
+def handle_google_callback(request, code):
+    if "google_oauth_flow" not in request.session:
+        raise Exception("OAuth flow not found in session.")
+
+    flow_serialized = request.session["google_oauth_flow"]
+    flow = pickle.loads(flow_serialized.encode("latin1"))
+
+    flow.fetch_token(code=code)
+    creds = flow.credentials
+
+    with open(TOKEN_FILE, "wb") as token:
+        pickle.dump(creds, token)
+
+    return creds
 
 def get_credentials():
     creds = None
@@ -38,20 +56,14 @@ def get_credentials():
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
-            creds = flow.run_local_server(port=8080)
-        with open(TOKEN_FILE, "wb") as token:
-            pickle.dump(creds, token)
-
+            raise Exception("Missing valid credentials. Please log in via Google OAuth.")
     return creds
 
 def get_gmail_service():
-    creds = get_credentials()
-    return build("gmail", "v1", credentials=creds)
+    return build("gmail", "v1", credentials=get_credentials())
 
 def get_calendar_service():
-    creds = get_credentials()
-    return build("calendar", "v3", credentials=creds)
+    return build("calendar", "v3", credentials=get_credentials())
 
 def get_recent_emails(max_results=5):
     service = get_gmail_service()
@@ -71,7 +83,6 @@ def get_recent_emails(max_results=5):
         sender = next((h["value"] for h in headers if h["name"] == "From"), "")
         date = next((h["value"] for h in headers if h["name"] == "Date"), "")
 
-        # Get the body (plain text if available)
         body = ""
         parts = msg_data["payload"].get("parts", [])
         for part in parts:
@@ -79,14 +90,13 @@ def get_recent_emails(max_results=5):
                 body = base64.urlsafe_b64decode(part["body"]["data"]).decode("utf-8", errors="ignore")
                 break
         if not body:
-            # Fallback to snippet
             body = msg_data.get("snippet", "")
 
         summary = (
             f"From: {sender}\n"
             f"Date: {date}\n"
             f"Subject: {subject}\n"
-            f"Body: {body.strip()[:1000]}"  # truncate to 1000 chars to keep prompt short
+            f"Body: {body.strip()[:1000]}"
         )
         email_summaries.append(summary)
 
@@ -95,7 +105,6 @@ def get_recent_emails(max_results=5):
 def get_upcoming_events(max_results=5):
     service = get_calendar_service()
     now = datetime.utcnow().isoformat() + 'Z'
-
     events_result = service.events().list(
         calendarId='primary',
         timeMin=now,
@@ -111,4 +120,3 @@ def get_upcoming_events(max_results=5):
         upcoming.append(f"{event.get('summary', 'No Title')} at {start}")
 
     return upcoming
-

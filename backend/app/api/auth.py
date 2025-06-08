@@ -2,11 +2,12 @@
 import sys
 sys.path.append("..")
 from fastapi import APIRouter, Request, Depends, HTTPException
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, HTMLResponse
 import httpx
 import urllib.parse
 from backend.app import config
-
+from backend.app.services.google import build_flow
+import pickle
 router = APIRouter()
 
 # === GOOGLE OAUTH FLOW ===
@@ -32,19 +33,39 @@ def google_auth():
     url = GOOGLE_AUTH_URL + "?" + urllib.parse.urlencode(params)
     return RedirectResponse(url)
 
+@router.get("/google/login")
+async def google_login(request: Request):
+    flow = build_flow()
+    auth_url, state = flow.authorization_url(
+        access_type="offline",
+        prompt="consent",
+        include_granted_scopes="true"
+    )
+    request.session["google_oauth_state"] = state  # Only store state
+    return RedirectResponse(auth_url)
+
+
 @router.get("/google/callback")
-async def google_callback(code: str):
-    async with httpx.AsyncClient() as client:
-        data = {
-            "code": code,
-            "client_id": config.settings.GOOGLE_CLIENT_ID,
-            "client_secret": config.settings.GOOGLE_CLIENT_SECRET,
-            "redirect_uri": config.settings.GOOGLE_REDIRECT_URI,
-            "grant_type": "authorization_code"
-        }
-        resp = await client.post(GOOGLE_TOKEN_URL, data=data)
-        token_data = resp.json()
-        return token_data
+async def google_callback(request: Request, code: str):
+    state = request.session.get("google_oauth_state")
+    if not state:
+        raise HTTPException(status_code=400, detail="Missing OAuth state")
+
+    flow = build_flow()
+    flow.fetch_token(code=code)
+    credentials = flow.credentials
+
+    # ✅ Save token.pickle
+    with open("token.pickle", "wb") as token_file:
+        pickle.dump(credentials, token_file)
+
+    return HTMLResponse("✅ Google OAuth successful! Token saved.")
+
+@router.get("/logout")
+async def logout(request: Request):
+    request.session.clear()
+    return HTMLResponse("✅ Logged out successfully.")
+
 
 
 # === HUBSPOT OAUTH FLOW ===
