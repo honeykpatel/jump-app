@@ -21,6 +21,12 @@ if os.environ.get("GOOGLE_CREDS") and not os.path.exists(CREDENTIALS_FILE):
     with open(CREDENTIALS_FILE, "w") as f:
         f.write(os.environ["GOOGLE_CREDS"])
 
+# Inject token.pickle from env if not present
+if os.environ.get("GOOGLE_TOKEN") and not os.path.exists("token.pickle"):
+    with open("token.pickle", "wb") as f:
+        import base64
+        f.write(base64.b64decode(os.environ["GOOGLE_TOKEN"]))
+
 
 def get_credentials():
     creds = None
