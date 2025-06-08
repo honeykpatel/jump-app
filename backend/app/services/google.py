@@ -15,6 +15,13 @@ SCOPES = [
 TOKEN_FILE = "token.pickle"
 CREDENTIALS_FILE = "backend/app/credentials.json"
 
+# Inject credentials.json from environment variable on deployment
+if os.environ.get("GOOGLE_CREDS") and not os.path.exists(CREDENTIALS_FILE):
+    os.makedirs(os.path.dirname(CREDENTIALS_FILE), exist_ok=True)
+    with open(CREDENTIALS_FILE, "w") as f:
+        f.write(os.environ["GOOGLE_CREDS"])
+
+
 def get_credentials():
     creds = None
     if os.path.exists(TOKEN_FILE):
