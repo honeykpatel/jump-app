@@ -1,0 +1,4 @@
+token.pickle
+*.json
+.env
+__pycache__/
