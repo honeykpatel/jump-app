@@ -59,7 +59,7 @@ async def google_callback(request: Request, code: str):
     with open("token.pickle", "wb") as token_file:
         pickle.dump(credentials, token_file)
 
-    return RedirectResponse("http://localhost:5173?auth=success")
+    return RedirectResponse("https://jump-app-ulrl.vercel.app/?auth=success")
 
 @router.get("/logout")
 async def logout(request: Request):
