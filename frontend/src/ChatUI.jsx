@@ -73,16 +73,16 @@ export default function ChatUI() {
   };
 
   return (
-    <div className="flex flex-col h-screen font-sans bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-200">
-      <header className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-800">
-        <div className="flex items-center gap-2">
-          <Sparkles className="text-indigo-500" />
-          <h2 className="font-semibold">AI Chat Agent</h2>
-        </div>
-      </header>
-
-      <div className="flex-1 p-6 overflow-y-auto">
-        <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-100 via-gray-50 to-indigo-100 dark:from-gray-900 dark:via-gray-800 dark:to-indigo-950 font-sans">
+      <div className="flex flex-col w-full max-w-2xl min-h-[70vh] bg-white dark:bg-gray-900 shadow-2xl rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+        {/* Header */}
+        <header className="flex items-center gap-3 p-5 border-b border-gray-200 dark:border-gray-800 bg-indigo-50 dark:bg-gray-800">
+          <Sparkles className="text-indigo-500 w-7 h-7" />
+          <h2 className="font-semibold text-lg tracking-tight text-gray-900 dark:text-gray-100">AI Chat Agent</h2>
+        </header>
+  
+        {/* Messages */}
+        <div className="flex-1 px-6 py-6 overflow-y-auto bg-gradient-to-br from-white via-indigo-50 to-gray-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
           {messages.map((msg, i) => (
             <ChatMessage key={i} msg={msg} />
           ))}
@@ -94,26 +94,28 @@ export default function ChatUI() {
           )}
           <div ref={chatEndRef} />
         </div>
-      </div>
-
-      <div className="p-6 border-t border-gray-200 dark:border-gray-800">
-        <form onSubmit={handleSubmit} className="max-w-4xl mx-auto flex items-center gap-4">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask a question or give a command..."
-            className="w-full p-3 bg-gray-100 dark:bg-gray-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            disabled={isLoading}
-          />
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="p-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed"
-          >
-            <Send />
-          </button>
-        </form>
+  
+        {/* Input */}
+        <div className="p-5 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+          <form onSubmit={handleSubmit} className="flex items-center gap-4">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Ask a question or give a command..."
+              className="flex-1 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              disabled={isLoading}
+            />
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="p-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed transition-all"
+              aria-label="Send"
+            >
+              <Send />
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );

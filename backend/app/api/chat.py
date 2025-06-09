@@ -2,23 +2,50 @@
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-import os
 from openai import OpenAI
-from backend.app.services.google import get_recent_emails, get_upcoming_events
-
+from backend.app.services.google import get_recent_emails, get_upcoming_events, send_email, reschedule_event
 
 router = APIRouter()
+client = OpenAI()
 
-# Initialize OpenAI client
-client = OpenAI()  # Reads from OPENAI_API_KEY env var
-
-# Request schema
 class ChatRequest(BaseModel):
     question: str
 
-# Response schema
 class ChatResponse(BaseModel):
     answer: str
+
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "send_email_tool",
+            "description": "Send an email via Gmail",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "email": {"type": "string", "description": "Recipient's email address"},
+                    "message": {"type": "string", "description": "Email message to send"},
+                },
+                "required": ["email", "message"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reschedule_event_tool",
+            "description": "Reschedule a meeting with a contact",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "person": {"type": "string", "description": "Name or email of the person"},
+                    "new_time": {"type": "string", "description": "New time to reschedule the meeting to"},
+                },
+                "required": ["person", "new_time"]
+            }
+        }
+    }
+]
 
 def ask_openai(question: str, context: str = "") -> str:
     response = client.chat.completions.create(
@@ -28,18 +55,32 @@ def ask_openai(question: str, context: str = "") -> str:
                 "role": "system",
                 "content": (
                     "You are a helpful assistant for a financial advisor. "
-                    "Use the provided Gmail and Google Calendar context to answer questions clearly and concisely. "
-                    "Mention email subjects, sender names, and specific times or dates when available. "
-                    "Respond in a professional tone."
+                    "Use tools when needed to send emails or reschedule meetings."
                 )
             },
             {
                 "role": "user",
-                "content": f"Recent Emails:\n{context}\n\nQuestion: {question}"
+                "content": f"Context:\n{context}\n\nQuestion:\n{question}"
             }
-        ]
+        ],
+        tools=tools,
+        tool_choice="auto"
     )
-    return response.choices[0].message.content.strip()
+
+    message = response.choices[0].message
+
+    if message.tool_calls:
+        for tool_call in message.tool_calls:
+            name = tool_call.function.name
+            args = eval(tool_call.function.arguments)
+            if name == "send_email_tool":
+                send_email(args["email"], args["message"])
+                return f"✅ I emailed {args['email']} with message: \"{args['message']}\""
+            elif name == "reschedule_event_tool":
+                result = reschedule_event(args["person"], args["new_time"])
+                return result
+    else:
+        return message.content.strip()
 
 @router.post("/", response_model=ChatResponse)
 async def chat_with_agent(request: ChatRequest):
@@ -47,7 +88,6 @@ async def chat_with_agent(request: ChatRequest):
         emails = get_recent_emails()
         events = get_upcoming_events()
 
-        # Format emails and events
         formatted_emails = (
             "\n".join(f"- {email}" for email in emails) if isinstance(emails, list) else str(emails)
         )
@@ -55,12 +95,10 @@ async def chat_with_agent(request: ChatRequest):
             "\n".join(f"- {event}" for event in events) if isinstance(events, list) else str(events)
         )
 
-        context = (
-            f"Recent emails:\n{formatted_emails}\n\n"
-            f"Upcoming calendar events:\n{formatted_events}"
-        )
+        context = f"Recent emails:\n{formatted_emails}\n\nUpcoming calendar events:\n{formatted_events}"
         answer = ask_openai(request.question, context=context)
         return ChatResponse(answer=answer)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
